@@ -36,7 +36,7 @@ public class GLTFObject : MonoBehaviour
         float size=Math.Max(Math.Max(extents.x,extents.y), extents.z);
         if(size==0)size=1;
 
-        transform.localScale=new Vector3(10/size,10/size,10/size);
+        transform.localScale=new Vector3(1/size,1/size,1/size);
 
         // Get the SceneInstance to access the instance's properties
         //var sceneInstance = instantiator.SceneInstance;
