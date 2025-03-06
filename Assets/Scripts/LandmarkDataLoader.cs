@@ -1,10 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Networking;
+using System.Collections;
 
 public class LandmarkDataLoader : MonoBehaviour
 {
     public static LandmarkDataLoader Instance;
 
+    private string url = "https://digitalworlds.github.io/CURE25_Test/models/Callithrix/Callithrix.json";
     private Dictionary<string, LandmarkEntry> landmarkDict;
 
     void Awake()
@@ -19,30 +22,37 @@ public class LandmarkDataLoader : MonoBehaviour
             return;
         }
 
-        LoadLandmarkData();
+        StartCoroutine(DownloadJson());
     }
 
-    void LoadLandmarkData()
+    IEnumerator DownloadJson()
     {
-        // load 'landmark_data.json' from Resources (must be in 'Resources' folder)
-        TextAsset jsonFile = Resources.Load<TextAsset>("landmark_data");
-        if (jsonFile == null)
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            Debug.LogError("LandmarkDataLoader: landmark_data.json not found in Resources!");
-            return;
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string jsonText = request.downloadHandler.text;
+                Debug.Log("JSON Loaded: " + jsonText);
+
+                // parse JSON
+                LandmarkData data = JsonUtility.FromJson<LandmarkData>(jsonText);
+                landmarkDict = new Dictionary<string, LandmarkEntry>();
+
+                // add to dictionary 
+                foreach (var entry in data.landmarks)
+                {
+                    landmarkDict[entry.id] = entry;
+                }
+
+                Debug.Log("LandmarkDataLoader: Loaded " + landmarkDict.Count + " landmarks from JSON.");
+            }
+            else
+            {
+                Debug.LogError("Failed to load JSON: " + request.error);
+            }
         }
-
-        // parse JSON
-        LandmarkData data = JsonUtility.FromJson<LandmarkData>(jsonFile.text);
-        landmarkDict = new Dictionary<string, LandmarkEntry>();
-
-        // add to dictionary 
-        foreach (var entry in data.landmarks)
-        {
-            landmarkDict[entry.id] = entry;
-        }
-
-        Debug.Log("LandmarkDataLoader: Loaded " + landmarkDict.Count + " landmarks from JSON.");
     }
 
     public LandmarkEntry GetLandmark(string id)
