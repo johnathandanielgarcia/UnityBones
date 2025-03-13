@@ -4,7 +4,6 @@ using TMPro;
 
 public class SkullViewerMultiPlatform : MonoBehaviour
 {
-    // can change all the speeds to however you'd like
     [Header("Target & Distance")]
     public Transform target;
     public float distance = 2f;
@@ -38,9 +37,12 @@ public class SkullViewerMultiPlatform : MonoBehaviour
     private bool isDraggingMouse = false;
     private Vector3 mouseDownPos;
 
-    // single finger touch compatibility 
+    // For single-finger touch
     private Vector2 touchStartPos;
     private bool isTap = false;
+
+    // Reference to the camera for raycasting
+    private Camera mainCamera;
 
     void Start()
     {
@@ -51,6 +53,12 @@ public class SkullViewerMultiPlatform : MonoBehaviour
         {
             Debug.LogWarning("SkullViewerMultiPlatform: No target assigned!");
         }
+
+        // Cache the main camera reference
+        mainCamera = Camera.main;
+        
+        // Force initialization of the LandmarkDataLoader
+        Debug.Log("LandmarkDataLoader instance exists: " + (LandmarkDataLoader.Instance != null));
     }
 
     void Update()
@@ -59,19 +67,19 @@ public class SkullViewerMultiPlatform : MonoBehaviour
 
         if (Input.touchCount == 0)
         {
-            // for desktop users
+            // Desktop approach
             HandleMouseAndKeyboard();
         }
         else
         {
-            // for mobile device users 
+            // Mobile/touch approach
             HandleTouchInput();
         }
 
-        // press 'd' to clear text on desktop 
+        // Press D to clear text
         if (Input.GetKeyDown(KeyCode.D))
         {
-            if (infoText != null) infoText.text = "";
+            ClearInfoText();
         }
     }
 
@@ -86,11 +94,18 @@ public class SkullViewerMultiPlatform : MonoBehaviour
         transform.LookAt(target.position);
     }
 
-    
-    // define mouse & keys for desktop 
+    // Helper method to clear info text
+    private void ClearInfoText()
+    {
+        if (infoText != null) infoText.text = "";
+    }
+
+    // -----------------------
+    // Desktop: Mouse & Keys
+    // -----------------------
     void HandleMouseAndKeyboard()
     {
-        // click & rotate
+        // 1) Mouse: Click & Drag
         if (Input.GetMouseButtonDown(0))
         {
             mouseDownPos = Input.mousePosition;
@@ -120,12 +135,12 @@ public class SkullViewerMultiPlatform : MonoBehaviour
         {
             if (!isDraggingMouse)
             {
-                // single click -> check if its a landmark area to populate fact
+                // It's a click => do a landmark check
                 CheckLandmarkClick(Input.mousePosition);
             }
         }
 
-        // use arrow keys to rotate object
+        // 2) Arrow Key Rotation
         if (Input.GetKey(KeyCode.LeftArrow))
         {
             currentX -= keyRotationSpeed * Time.deltaTime;
@@ -145,7 +160,7 @@ public class SkullViewerMultiPlatform : MonoBehaviour
             currentY = Mathf.Clamp(currentY, minYAngle, maxYAngle);
         }
 
-        // use 'i' and 'o' keys to zoom in/out of object 
+        // 3) I/O keys for Zoom
         if (Input.GetKey(KeyCode.I))
         {
             distance -= keyZoomSpeed * Time.deltaTime;
@@ -157,7 +172,7 @@ public class SkullViewerMultiPlatform : MonoBehaviour
             distance = Mathf.Clamp(distance, minDistance, maxDistance);
         }
 
-        // scroll with moude (or two finger on keypad) -> zoom in/out 
+        // 4) Mouse Scroll => Zoom
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         if (Mathf.Abs(scroll) > 0.001f)
         {
@@ -166,10 +181,12 @@ public class SkullViewerMultiPlatform : MonoBehaviour
         }
     }
 
-    // mobile touch screen 
+    // -----------------------
+    // Mobile/Touch Approach
+    // -----------------------
     void HandleTouchInput()
     {
-        // one finger 
+        // Single finger => rotate or tap
         if (Input.touchCount == 1)
         {
             Touch t = Input.GetTouch(0);
@@ -184,7 +201,7 @@ public class SkullViewerMultiPlatform : MonoBehaviour
                 float dist = (t.position - touchStartPos).magnitude;
                 if (dist > tapThreshold)
                 {
-                    isTap = false; // moving object around 
+                    isTap = false; // it's a drag
 
                     float dx = t.deltaPosition.x * touchRotationSpeed;
                     float dy = t.deltaPosition.y * touchRotationSpeed;
@@ -196,14 +213,14 @@ public class SkullViewerMultiPlatform : MonoBehaviour
             }
             else if (t.phase == TouchPhase.Ended)
             {
-                // just tap -> check if its a landmark area 
+                // If it's still a tap, do the landmark check
                 if (isTap)
                 {
                     CheckLandmarkClick(t.position);
                 }
             }
         }
-        // two finger touch -> zoom in/out 
+        // Two-finger => pinch zoom
         else if (Input.touchCount == 2)
         {
             Touch t0 = Input.GetTouch(0);
@@ -221,42 +238,60 @@ public class SkullViewerMultiPlatform : MonoBehaviour
         }
     }
 
-    // landmark populaion
+    // -------------
+    // Landmark Raycast
+    // -------------
     void CheckLandmarkClick(Vector2 screenPos)
     {
-        Ray ray = Camera.main.ScreenPointToRay(screenPos);
+        // Use cached camera reference
+        Ray ray = mainCamera.ScreenPointToRay(screenPos);
         RaycastHit hit;
+        
+        Debug.Log("Casting ray from screen position: " + screenPos);
+        
         if (Physics.Raycast(ray, out hit, 100f))
         {
+            Debug.Log("Hit something: " + hit.collider.name);
+            
             Landmark landmark = hit.collider.GetComponent<Landmark>();
             if (landmark != null)
             {
-                // get data from JSON 
+                Debug.Log("Found Landmark component with ID: " + landmark.landmarkId);
+                
+                // Look up data from our non-MonoBehaviour LandmarkDataLoader
                 LandmarkEntry entry = LandmarkDataLoader.Instance.GetLandmark(landmark.landmarkId);
                 if (entry != null)
                 {
-                    Debug.Log("Clicked Landmark: " + entry.name);
+                    Debug.Log("Clicked Landmark: " + entry.name + " with fact: " + entry.fact);
                     if (infoText != null)
                     {
                         infoText.text = entry.name + "\n" + entry.fact;
+                        Debug.Log("Set infoText to: " + infoText.text);
+                    }
+                    else
+                    {
+                        Debug.LogError("infoText UI component is null!");
                     }
                 }
                 else
                 {
-                    // if no id for landmark in JSON 
-                    if (infoText != null) infoText.text = "";
+                    Debug.LogWarning("No entry found for landmarkId: " + landmark.landmarkId);
+                    // If no matching ID in dictionary
+                    ClearInfoText();
                 }
             }
             else
             {
-                // clicked on smth w no landmark -> remove text
-                if (infoText != null) infoText.text = "";
+                Debug.Log("Hit object has no Landmark component");
+                // If we clicked something with no Landmark, clear text
+                ClearInfoText();
             }
         }
         else
         {
-            // clicked empty space -> remove text
-            if (infoText != null) infoText.text = "";
+            Debug.Log("Ray did not hit anything");
+            // If we clicked/tapped empty space, clear text
+            ClearInfoText();
         }
     }
 }
